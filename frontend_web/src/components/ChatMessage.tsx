@@ -131,18 +131,18 @@ export function ToolInvocationPart({ part }: { part: ToolInvocationUIPart }) {
   const hasResult = !!toolInvocation.result;
 
   return (
-    <div className="my-2 rounded-lg border border-border bg-card/50 dark:bg-card/30 overflow-hidden">
+    <div className="my-2 rounded-lg border border-border bg-card/50 overflow-hidden">
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-muted/30 dark:bg-muted/20 border-b border-border">
+      <div className="flex items-center gap-2 px-3 py-2 bg-muted/30 border-b border-border">
         <Wrench className="w-4 h-4 text-muted-foreground" />
-        <span className="text-sm text-muted-foreground">Tool Call</span>
+        <span className="text-sm text-muted-foreground">ツール実行</span>
         <Badge variant="secondary" className="font-mono text-xs">
           {toolInvocation.toolName}
         </Badge>
         {hasResult ? (
-          <CheckCircle2 className="w-4 h-4 text-green-500 dark:text-green-400 ml-auto" />
+          <CheckCircle2 className="w-4 h-4 text-brand ml-auto" />
         ) : (
-          <Loader2 className="w-4 h-4 text-muted-foreground ml-auto animate-spin" />
+          <Loader2 className="w-4 h-4 text-brand/60 ml-auto animate-spin" />
         )}
       </div>
 
@@ -151,7 +151,7 @@ export function ToolInvocationPart({ part }: { part: ToolInvocationUIPart }) {
         <div className="border-b border-border last:border-b-0">
           <div className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted/20">
             <ChevronRight className="w-3 h-3" />
-            Arguments
+            引数
           </div>
           <CodeBlock code={JSON.stringify(toolInvocation.args, null, '  ')} />
         </div>
@@ -162,7 +162,7 @@ export function ToolInvocationPart({ part }: { part: ToolInvocationUIPart }) {
         <div>
           <div className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted/20">
             <ChevronRight className="w-3 h-3" />
-            Result
+            結果
           </div>
           <CodeBlock code={toolInvocation.result} />
         </div>
@@ -206,7 +206,7 @@ function ChatMessageContent({
             role === 'user'
               ? 'bg-primary text-primary-foreground'
               : role === 'assistant'
-                ? 'bg-secondary text-secondary-foreground'
+                ? 'bg-brand/15 text-brand'
                 : 'bg-accent text-accent-foreground'
           )}
         >
@@ -215,7 +215,9 @@ function ChatMessageContent({
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-sm font-medium capitalize">{role}</span>
+          <span className="text-sm font-medium">
+            {role === 'assistant' ? 'エージェント' : role === 'user' ? 'あなた' : role}
+          </span>
         </div>
         <div className="text-sm whitespace-pre-wrap break-words content">
           {content.parts.map((part, i) => (

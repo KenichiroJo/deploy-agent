@@ -21,7 +21,7 @@ export function StepEvent({ id, name, createdAt, isRunning, threadId }: StepEven
         <div
           className={cn(
             'w-8 h-8 rounded-full flex items-center justify-center',
-            isRunning ? 'bg-blue-500/10 text-blue-500' : 'bg-green-500/10 text-green-500'
+            isRunning ? 'bg-brand/10 text-brand' : 'bg-brand/15 text-brand'
           )}
         >
           <Icon className={cn('w-4 h-4', isRunning && 'animate-spin')} />
@@ -33,7 +33,7 @@ export function StepEvent({ id, name, createdAt, isRunning, threadId }: StepEven
           <span className="text-xs text-muted-foreground">{date.toLocaleTimeString()}</span>
         </div>
         <div className="text-xs text-muted-foreground">
-          {isRunning ? 'In progress...' : 'Completed'}
+          {isRunning ? '実行中...' : '完了'}
         </div>
       </div>
     </div>

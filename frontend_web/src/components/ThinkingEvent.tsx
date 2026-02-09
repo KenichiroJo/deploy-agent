@@ -8,7 +8,7 @@ export function ThinkingEvent() {
         <div
           className={cn(
             'w-8 h-8 rounded-full flex items-center justify-center',
-            'bg-blue-500/10 text-blue-500'
+            'bg-brand/10 text-brand'
           )}
         >
           <Loader2 className={cn('w-4 h-4 animate-spin')} />
@@ -20,7 +20,7 @@ export function ThinkingEvent() {
             className="text-sm font-medium flex items-center h-full"
             data-testid="thinking-loading"
           >
-            Thinking
+            思考中
           </span>
         </div>
       </div>

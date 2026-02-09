@@ -33,7 +33,7 @@ const initialMessages: MessageResponse[] = [
       parts: [
         {
           type: 'text',
-          text: `Hi! I'm a topic research agent; ask me to research any topic that's on your mind.`,
+          text: `\u30c7\u30d7\u30ed\u30a4\u30e1\u30f3\u30c8\u76e3\u8996\u30a8\u30fc\u30b8\u30a7\u30f3\u30c8\u3067\u3059\u3002\u30c7\u30d7\u30ed\u30a4\u30e1\u30f3\u30c8\u306e\u30d8\u30eb\u30b9\u30c1\u30a7\u30c3\u30af\u3001\u30a8\u30e9\u30fc\u5206\u6790\u3001\u30d1\u30d5\u30a9\u30fc\u30de\u30f3\u30b9\u78ba\u8a8d\u306a\u3069\u3001\u304a\u6c17\u8efd\u306b\u3054\u8cea\u554f\u304f\u3060\u3055\u3044\u3002`,
         },
       ],
     },
@@ -168,6 +168,7 @@ export function ChatImplementation({ chatId }: { chatId: string }) {
         setUserInput={setUserInput}
         onSubmit={sendMessage}
         runningAgent={isAgentRunning}
+        showSuggestions={!combinedEvents || combinedEvents.length === 0}
       />
     </Chat>
   );

@@ -17,6 +17,10 @@ import {
   Plus,
   Settings,
   LoaderCircle,
+  Shield,
+  Activity,
+  AlertTriangle,
+  Server,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -39,6 +43,12 @@ export interface ChatSidebarProps {
   isLoadingDeleteChat: boolean;
 }
 
+const sidebarQuickActions = [
+  { icon: Server, label: '\u30c7\u30d7\u30ed\u30a4\u30e1\u30f3\u30c8\u4e00\u89a7', prompt: '\u30c7\u30d7\u30ed\u30a4\u30e1\u30f3\u30c8\u4e00\u89a7\u3092\u898b\u305b\u3066' },
+  { icon: Activity, label: '\u30d8\u30eb\u30b9\u30c1\u30a7\u30c3\u30af', prompt: '\u5168\u30c7\u30d7\u30ed\u30a4\u30e1\u30f3\u30c8\u306e\u30d8\u30eb\u30b9\u30c1\u30a7\u30c3\u30af\u3092\u3057\u3066' },
+  { icon: AlertTriangle, label: '\u30a8\u30e9\u30fc\u5206\u6790', prompt: '\u6700\u8fd1\u306e\u30a8\u30e9\u30fc\u3092\u5206\u6790\u3057\u3066' },
+];
+
 export function ChatSidebar({
   isLoading,
   chats,
@@ -56,7 +66,7 @@ export function ChatSidebar({
       return <LoaderCircle className="animate-spin" />;
     }
     if (id === chatId) {
-      return <MessageSquareText />;
+      return <MessageSquareText className="text-brand" />;
     }
     return <MessageSquare />;
   };
@@ -65,37 +75,67 @@ export function ChatSidebar({
   return (
     <Sidebar className="sidebar">
       <SidebarContent>
+        {/* Brand Header */}
         <SidebarGroup>
-          <SidebarMenuItem key="open-settings">
-            <SidebarMenuButton disabled={isLoading} asChild onClick={goToSettings}>
-              <div>
-                <Settings />
-                <span>Settings</span>
-              </div>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarGroupLabel>Chats</SidebarGroupLabel>
-          <SidebarMenuItem key="new-chat">
-            <SidebarMenuButton
-              disabled={isLoading}
-              asChild
+          <div className="flex items-center gap-2.5 px-2 py-3">
+            <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-brand/15 shrink-0">
+              <Shield className="w-4 h-4 text-brand" />
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span className="text-sm font-semibold truncate">Deploy Monitor</span>
+              <span className="text-[10px] text-muted-foreground leading-tight">DataRobot Agent</span>
+            </div>
+          </div>
+        </SidebarGroup>
+
+        {/* Quick Actions */}
+        <SidebarGroup>
+          <SidebarGroupLabel className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+            \u30af\u30a4\u30c3\u30af\u30a2\u30af\u30b7\u30e7\u30f3
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {sidebarQuickActions.map(action => (
+                <SidebarMenuItem key={action.label}>
+                  <SidebarMenuButton
+                    disabled={isLoading}
+                    asChild
+                    onClick={onChatCreate}
+                  >
+                    <div className="cursor-pointer">
+                      <action.icon className="w-3.5 h-3.5 text-brand/70" />
+                      <span className="text-xs">{action.label}</span>
+                    </div>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Chats */}
+        <SidebarGroup>
+          <div className="flex items-center justify-between pr-1">
+            <SidebarGroupLabel className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+              \u4f1a\u8a71\u5c65\u6b74
+            </SidebarGroupLabel>
+            <button
               onClick={onChatCreate}
-              testId="start-new-chat-btn"
+              disabled={isLoading}
+              className="flex items-center justify-center w-5 h-5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer"
+              title="\u65b0\u3057\u3044\u30c1\u30e3\u30c3\u30c8"
             >
-              <div>
-                <Plus />
-                <span>Start new chat</span>
-              </div>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          </div>
           <SidebarGroupContent>
             <SidebarMenu id="sidebar-chats">
               {isLoading ? (
                 <>
-                  <Skeleton className="h-8" />
-                  <Skeleton className="h-8" />
-                  <Skeleton className="h-8" />
-                  <Skeleton className="h-8" />
+                  <Skeleton className="h-7 rounded-md" />
+                  <Skeleton className="h-7 rounded-md" />
+                  <Skeleton className="h-7 rounded-md" />
+                  <Skeleton className="h-7 rounded-md" />
                 </>
               ) : (
                 !!chats &&
@@ -108,7 +148,7 @@ export function ChatSidebar({
                     >
                       <div>
                         {getIcon(chat.id)}
-                        <span>{chat.name || 'New Chat'}</span>
+                        <span className="text-xs truncate">{chat.name || 'New Chat'}</span>
                       </div>
                     </SidebarMenuButton>
                     {chat.initialised && !chatToDelete && (
@@ -126,7 +166,7 @@ export function ChatSidebar({
                               setOpen(true);
                             }}
                           >
-                            <span>Delete chat</span>
+                            <span>\u524a\u9664</span>
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -136,6 +176,18 @@ export function ChatSidebar({
               )}
             </SidebarMenu>
           </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Settings - Bottom */}
+        <SidebarGroup className="mt-auto">
+          <SidebarMenuItem key="open-settings">
+            <SidebarMenuButton disabled={isLoading} asChild onClick={goToSettings}>
+              <div className="cursor-pointer">
+                <Settings className="w-3.5 h-3.5" />
+                <span className="text-xs">\u8a2d\u5b9a</span>
+              </div>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
         </SidebarGroup>
       </SidebarContent>
       <ConfirmDialogModal

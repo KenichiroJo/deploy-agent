@@ -54,7 +54,7 @@ export function ChatProgress({
             key={id}
             className={cn(
               'transition-all duration-300 py-0',
-              allDone && !hasError && 'opacity-80 border-green-500/30',
+              allDone && !hasError && 'opacity-80 border-brand/30',
               hasError && 'opacity-80 border-red-500/30'
             )}
           >
@@ -64,12 +64,12 @@ export function ChatProgress({
                   {hasError ? (
                     <XCircle className="h-4 w-4 text-red-500" />
                   ) : allDone ? (
-                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    <CheckCircle2 className="h-4 w-4 text-brand" />
                   ) : (
-                    <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
+                    <Loader2 className="h-4 w-4 text-brand animate-spin" />
                   )}
                   <span className="text-sm font-medium">
-                    {hasError ? 'Failed' : allDone ? 'Completed' : 'Processing'}
+                    {hasError ? '失敗' : allDone ? '完了' : '処理中'}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -106,7 +106,7 @@ export function ChatProgress({
                       {step.error ? (
                         <XCircle className="h-3.5 w-3.5 text-red-500 flex-shrink-0" />
                       ) : step.done ? (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-green-500 flex-shrink-0" />
+                        <CheckCircle2 className="h-3.5 w-3.5 text-brand flex-shrink-0" />
                       ) : (
                         <Circle className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                       )}
