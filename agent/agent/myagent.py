@@ -15,6 +15,7 @@ from typing import Any
 
 from datarobot_genai.core.agents import make_system_prompt
 from datarobot_genai.langgraph.agent import LangGraphAgent
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_litellm.chat_models import ChatLiteLLM
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import create_react_agent
@@ -126,6 +127,12 @@ class MyAgent(LangGraphAgent):
     """DataRobotデプロイメント監視に特化したエージェント。
     トレース分析、パフォーマンス診断、エラー調査を自然言語で実行。
     """
+
+    @property
+    def prompt_template(self) -> ChatPromptTemplate:
+        return ChatPromptTemplate.from_messages([
+            ("user", "{user_prompt_content}"),
+        ])
 
     @property
     def workflow(self) -> StateGraph[MessagesState]:
