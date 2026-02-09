@@ -9,6 +9,152 @@ from datarobot_genai.drmcp import dr_mcp_tool
 logger = logging.getLogger(__name__)
 
 
+@dr_mcp_tool(tags={"monitoring", "deployment", "list"})
+async def list_deployments(
+    search: Optional[str] = None,
+    limit: int = 20,
+) -> str:
+    """
+    ユーザーがアクセス可能なデプロイメント一覧を取得
+
+    Args:
+        search: デプロイメント名の検索キーワード（部分一致、オプション）
+        limit: 取得する最大件数（デフォルト: 20）
+
+    Returns:
+        デプロイメント一覧（マークダウン形式）
+        - デプロイメントID、名前（ラベル）、ステータス
+        - 作成日時
+    """
+    try:
+        deployments = Deployment.list()
+
+        # 検索キーワードでフィルタ
+        if search:
+            search_lower = search.lower()
+            deployments = [
+                d
+                for d in deployments
+                if search_lower in (d.label or "").lower()
+                or search_lower in (d.description or "").lower()
+            ]
+
+        # 件数制限
+        deployments = deployments[:limit]
+
+        if not deployments:
+            if search:
+                return f'"{search}" に一致するデプロイメントが見つかりませんでした。'
+            return "アクセス可能なデプロイメントがありません。"
+
+        report = f"""## デプロイメント一覧
+
+取得件数: {len(deployments)}件{f' (検索: "{search}")' if search else ''}
+
+| # | デプロイメント名 | デプロイメントID | ステータス |
+|---|-----------------|----------------|----------|
+"""
+
+        for i, d in enumerate(deployments, 1):
+            report += (
+                f"| {i} | {d.label or 'N/A'} "
+                f"| `{d.id}` | {d.status or 'N/A'} |\n"
+            )
+
+        report += (
+            "\n**ヒント**: デプロイメントIDを使って "
+            "`get_deployment_overview` や `diagnose_deployment_issues` "
+            "で詳細を確認できます。"
+        )
+
+        return report
+
+    except Exception as e:
+        return f"デプロイメント一覧の取得中にエラーが発生しました: {str(e)}"
+
+
+@dr_mcp_tool(tags={"monitoring", "deployment", "search"})
+async def find_deployment_by_name(
+    deployment_name: str,
+) -> str:
+    """
+    デプロイメント名（ラベル）からデプロイメントIDを検索・解決する。
+    ユーザーがデプロイメント名で指定した場合、このツールでIDに変換してから
+    他の監視ツールを実行する。
+
+    Args:
+        deployment_name: デプロイメント名（部分一致で検索、例: "deploy-agent"）
+
+    Returns:
+        マッチしたデプロイメント情報（JSON形式）
+        - 完全一致がある場合はそのデプロイメントのID
+        - 部分一致が複数ある場合は候補一覧
+    """
+    try:
+        deployments = Deployment.list()
+
+        name_lower = deployment_name.lower()
+
+        # 完全一致を優先検索
+        exact_matches = [
+            d for d in deployments if (d.label or "").lower() == name_lower
+        ]
+
+        if len(exact_matches) == 1:
+            d = exact_matches[0]
+            result = {
+                "match_type": "exact",
+                "deployment_id": d.id,
+                "label": d.label,
+                "status": d.status,
+                "description": d.description,
+            }
+            return json.dumps(result, ensure_ascii=False, indent=2)
+
+        # 部分一致検索
+        partial_matches = [
+            d for d in deployments if name_lower in (d.label or "").lower()
+        ]
+
+        if len(partial_matches) == 0:
+            return (
+                f'"{deployment_name}" に一致するデプロイメントが見つかりません。\n'
+                "`list_deployments` で利用可能なデプロイメント一覧を確認してください。"
+            )
+
+        if len(partial_matches) == 1:
+            d = partial_matches[0]
+            result = {
+                "match_type": "partial",
+                "deployment_id": d.id,
+                "label": d.label,
+                "status": d.status,
+                "description": d.description,
+            }
+            return json.dumps(result, ensure_ascii=False, indent=2)
+
+        # 複数候補がある場合
+        candidates = []
+        for d in partial_matches[:10]:
+            candidates.append(
+                {
+                    "deployment_id": d.id,
+                    "label": d.label,
+                    "status": d.status,
+                }
+            )
+
+        result_multi = {
+            "match_type": "multiple",
+            "message": f'"{deployment_name}" に複数のデプロイメントがマッチしました。どれを使いますか？',
+            "candidates": candidates,
+        }
+        return json.dumps(result_multi, ensure_ascii=False, indent=2)
+
+    except Exception as e:
+        return f"デプロイメント検索中にエラーが発生しました: {str(e)}"
+
+
 @dr_mcp_tool(tags={"monitoring", "deployment", "overview"})
 async def get_deployment_overview(deployment_id: str) -> str:
     """

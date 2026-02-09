@@ -88,6 +88,8 @@ async def my_tool(deployment_id: str) -> str:
 ## 実装するMCPツール（Phase別）
 
 ### Phase 1: 基本監視（MVP）
+- `list_deployments` - デプロイメント一覧（名前検索対応）
+- `find_deployment_by_name` - デプロイメント名→ID解決
 - `get_deployment_overview` - デプロイメント概要
 - `get_service_health` - サービスヘルス統計
 - `get_recent_traces` - 最近のトレース一覧
