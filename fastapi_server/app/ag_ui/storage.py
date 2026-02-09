@@ -20,6 +20,7 @@ from uuid import UUID, uuid4
 
 from ag_ui.core import (
     BaseEvent,
+    BaseMessage,
     RunAgentInput,
     RunErrorEvent,
     RunFinishedEvent,
@@ -180,9 +181,15 @@ class AGUIAgentWithStorage(AGUIAgent):
                     )
                 )
 
+        # Load full conversation history from database and inject into input
+        # so the agent receives context from previous turns
+        input_with_history = await self._build_input_with_history(
+            input, existing_chat
+        )
+
         state = StorageStateMachineState()
 
-        async for event in self._inner.run(input):
+        async for event in self._inner.run(input_with_history):
             if isinstance(event, RunStartedEvent):
                 state = StorageStateMachineState()
             if isinstance(event, RunFinishedEvent):
@@ -231,6 +238,80 @@ class AGUIAgentWithStorage(AGUIAgent):
             await self._handle_reasoning_event(state, existing_chat, event)
 
             yield event
+
+    async def _build_input_with_history(
+        self, input: RunAgentInput, chat: Chat
+    ) -> RunAgentInput:
+        """
+        Build a new RunAgentInput that includes the full conversation history
+        from the database, so the agent has context from previous turns.
+
+        The incoming input.messages typically contains only the latest user message.
+        This method loads all persisted messages (user + assistant) and constructs
+        a complete messages list for the agent.
+        """
+        # Get all messages from the database for this chat
+        all_db_messages = await self._message_repo.get_chat_messages(chat.uuid)
+
+        if not all_db_messages:
+            # No history yet, return input as-is
+            return input
+
+        # Collect IDs of incoming messages to avoid duplicating them
+        incoming_ids = {m.id for m in input.messages}
+
+        # Build history messages from database records
+        history_messages: list[BaseMessage] = []
+        for db_msg in all_db_messages:
+            # Skip messages that are already in the incoming input
+            if db_msg.agui_id and db_msg.agui_id in incoming_ids:
+                continue
+            # Skip in-progress messages (incomplete assistant responses)
+            if db_msg.in_progress:
+                continue
+            # Only include user and assistant messages for context
+            # (tool calls and reasoning are internal implementation details)
+            if db_msg.role not in (Role.USER.value, Role.ASSISTANT.value):
+                continue
+            # Skip empty messages
+            if not db_msg.content.strip():
+                continue
+
+            history_messages.append(
+                BaseMessage(
+                    id=db_msg.agui_id or str(db_msg.uuid),
+                    role=db_msg.role,
+                    content=db_msg.content,
+                    name=db_msg.name,
+                )
+            )
+
+        if not history_messages:
+            # No useful history, return input as-is
+            return input
+
+        # Combine: history first, then new messages
+        full_messages = history_messages + list(input.messages)
+
+        logger.debug(
+            "Injecting conversation history",
+            extra={
+                "history_count": len(history_messages),
+                "new_count": len(input.messages),
+                "total_count": len(full_messages),
+            },
+        )
+
+        # Create a new RunAgentInput with the full message history
+        return RunAgentInput(
+            thread_id=input.thread_id,
+            run_id=input.run_id,
+            state=input.state,
+            messages=full_messages,
+            tools=input.tools,
+            context=input.context,
+            forwarded_props=input.forwarded_props,
+        )
 
     async def _handle_reasoning_event(
         self, state: StorageStateMachineState, existing_chat: Chat, event: BaseEvent
