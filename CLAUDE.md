@@ -91,10 +91,12 @@ async def my_tool(deployment_id: str) -> str:
 - `list_deployments` - デプロイメント一覧（名前検索対応）
 - `find_deployment_by_name` - デプロイメント名→ID解決
 - `get_deployment_overview` - デプロイメント概要
-- `get_service_health` - サービスヘルス統計
-- `get_recent_traces` - 最近のトレース一覧
+- `get_service_health` - サービスヘルス統計（正しいAPIフィールド使用）
+- `get_recent_traces` - 最近の予測データ一覧（PredictionDataExport経由）
+- `search_trace_by_id` - 予測データ詳細（アソシエーションID検索）
 - `analyze_errors` - エラーパターン分析
 - `get_performance_metrics` - パフォーマンスメトリクス
+- `get_custom_metrics` - カスタムメトリクス（LLMコスト、トークン使用量等）
 
 ### Phase 2: マルチユーザー・エラー対処
 - `get_user_usage_stats` - ユーザー別利用統計
@@ -104,7 +106,6 @@ async def my_tool(deployment_id: str) -> str:
 - `diagnose_deployment_issues` - 自動診断
 
 ### Phase 3: 高度な分析
-- `search_trace_by_id` - トレース詳細（Span階層、I/O）
 - トレンド分析、根本原因分析
 
 ## DataRobot API利用パターン
@@ -113,10 +114,28 @@ async def my_tool(deployment_id: str) -> str:
 # デプロイメント取得
 deployment = Deployment.get(deployment_id=deployment_id)
 
-# サービス統計
+# サービス統計（正しいフィールド名）
 service_stats = deployment.get_service_stats(start=start_time, end=end_time)
-total_requests = service_stats.metrics.get('totalRequests', 0)
-error_rate = service_stats.metrics.get('errorRate', 0)
+m = service_stats.metrics
+total_requests = m.get('totalRequests')       # 総リクエスト数
+total_predictions = m.get('totalPredictions') # 総予測数
+execution_time = m.get('executionTime')       # 実行時間(ms)
+response_time = m.get('responseTime')         # レスポンス時間(ms)
+server_error_rate = m.get('serverErrorRate')  # サーバーエラー率(比率)
+user_error_rate = m.get('userErrorRate')      # ユーザーエラー率(比率)
+slow_requests = m.get('slowRequests')         # 低速リクエスト数
+num_consumers = m.get('numConsumers')         # ユニークユーザー数
+median_load = m.get('medianLoad')             # 中央値負荷(req/min)
+peak_load = m.get('peakLoad')                 # ピーク負荷(req/min)
+
+# 予測データエクスポート（トレース取得）
+from datarobot.models.deployment import PredictionDataExport
+export = PredictionDataExport.create(deployment_id=id, start=start, end=end)
+datasets = export.fetch_data()
+df = datasets[0].get_as_dataframe()
+
+# カスタムメトリクス（REST API経由）
+response = dr.Client().get(f"deployments/{id}/customMetrics/")
 ```
 
 ## 開発コマンド

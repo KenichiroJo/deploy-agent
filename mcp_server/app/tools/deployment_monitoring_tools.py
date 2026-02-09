@@ -219,9 +219,10 @@ async def get_service_health(
 
     Returns:
         サービス統計情報（マークダウン形式）
-        - 総リクエスト数、エラー数、成功率
-        - 平均レスポンス時間、P95レスポンス時間
-        - データエラー、システムエラーの詳細
+        - 総リクエスト数、総予測数
+        - 実行時間、レスポンス時間
+        - サーバーエラー率、ユーザーエラー率
+        - リクエスト負荷（中央値・ピーク）
     """
     try:
         deployment = Deployment.get(deployment_id=deployment_id)
@@ -237,14 +238,56 @@ async def get_service_health(
             start_dt = end_dt - timedelta(hours=24)
 
         service_stats = deployment.get_service_stats(start=start_dt, end=end_dt)
+        m = service_stats.metrics
 
-        total_requests = service_stats.metrics.get("totalRequests", 0)
-        total_errors = service_stats.metrics.get("totalErrors", 0)
+        total_requests = m.get("totalRequests") or 0
+        total_predictions = m.get("totalPredictions") or 0
+        server_error_rate = m.get("serverErrorRate")
+        user_error_rate = m.get("userErrorRate")
+        execution_time = m.get("executionTime")
+        response_time = m.get("responseTime")
+        slow_requests = m.get("slowRequests")
+        num_consumers = m.get("numConsumers")
+        median_load = m.get("medianLoad")
+        peak_load = m.get("peakLoad")
+        cache_hit_ratio = m.get("cacheHitRatio")
+
+        # エラー率から推定エラー数を計算
+        server_errors = (
+            int(total_requests * server_error_rate)
+            if server_error_rate is not None and total_requests > 0
+            else 0
+        )
+        user_errors = (
+            int(total_requests * user_error_rate)
+            if user_error_rate is not None and total_requests > 0
+            else 0
+        )
+        total_errors = server_errors + user_errors
         success_rate = (
-            ((total_requests - total_errors) / total_requests * 100)
+            ((1 - (server_error_rate or 0) - (user_error_rate or 0)) * 100)
             if total_requests > 0
             else 0
         )
+
+        def fmt_ms(val: object) -> str:
+            if val is None:
+                return "N/A"
+            return f"{val:,.1f}ms" if isinstance(val, (int, float)) else str(val)
+
+        def fmt_rate(val: object) -> str:
+            if val is None:
+                return "N/A"
+            return (
+                f"{val * 100:.2f}%" if isinstance(val, (int, float)) else str(val)
+            )
+
+        def fmt_load(val: object) -> str:
+            if val is None:
+                return "N/A"
+            return (
+                f"{val:.1f} req/min" if isinstance(val, (int, float)) else str(val)
+            )
 
         health_report = f"""## サービスヘルス: {deployment.label}
 
@@ -254,17 +297,24 @@ async def get_service_health(
 
 ### リクエスト統計
 - **総リクエスト数**: {total_requests:,}
-- **エラー数**: {total_errors:,}
+- **総予測数**: {total_predictions:,}
+- **推定エラー数**: {total_errors:,}
 - **成功率**: {success_rate:.2f}%
+- **ユニークユーザー数**: {num_consumers if num_consumers is not None else 'N/A'}
 
 ### パフォーマンス
-- **平均レスポンス時間**: {service_stats.metrics.get('avgResponseTime', 'N/A')}ms
-- **P95レスポンス時間**: {service_stats.metrics.get('p95ResponseTime', 'N/A')}ms
-- **最大レスポンス時間**: {service_stats.metrics.get('maxResponseTime', 'N/A')}ms
+- **実行時間**: {fmt_ms(execution_time)}
+- **レスポンス時間**: {fmt_ms(response_time)}
+- **低速リクエスト数**: {slow_requests if slow_requests is not None else 'N/A'}
+- **キャッシュヒット率**: {fmt_rate(cache_hit_ratio)}
 
 ### エラー内訳
-- **データエラー**: {service_stats.metrics.get('dataErrors', 0)}
-- **システムエラー**: {service_stats.metrics.get('systemErrors', 0)}"""
+- **サーバーエラー率**: {fmt_rate(server_error_rate)}
+- **ユーザーエラー率**: {fmt_rate(user_error_rate)}
+
+### リクエスト負荷
+- **中央値**: {fmt_load(median_load)}
+- **ピーク**: {fmt_load(peak_load)}"""
 
         return health_report
 
@@ -276,190 +326,205 @@ async def get_service_health(
 async def get_recent_traces(
     deployment_id: str,
     limit: int = 10,
-    filter_status: Optional[str] = None,
+    time_range_hours: int = 24,
 ) -> str:
     """
-    最近のトレース情報を取得（エージェントワークフロー用）
+    最近の予測データ（トレース）を取得（PredictionDataExport API経由）
 
     Args:
         deployment_id: デプロイメントID
-        limit: 取得するトレース数（1-100、デフォルト: 10）
-        filter_status: ステータスフィルタ（"success", "error", "all"）
+        limit: 表示する最大件数（デフォルト: 10）
+        time_range_hours: 取得対象の時間範囲（時間単位、デフォルト: 24）
 
     Returns:
-        トレース情報（マークダウン形式）
-        - Trace ID、タイムスタンプ、ステータス
-        - 実行時間、ツール使用状況
-        - エラーがある場合はエラー詳細
+        予測データ一覧（マークダウン形式）
+        - アソシエーションID、タイムスタンプ
+        - 予測結果、レスポンス時間
     """
     try:
         deployment = Deployment.get(deployment_id=deployment_id)
 
-        # Data Exploration APIからトレースデータを取得
-        # deployment.get_predictions() や関連APIを利用
-        trace_summary = f"""## 最近のトレース: {deployment.label}
+        end_dt = datetime.now(timezone.utc)
+        start_dt = end_dt - timedelta(hours=time_range_hours)
 
-取得件数: {limit}件
-フィルタ: {filter_status or '全て'}
+        trace_summary = f"""## 最近の予測データ: {deployment.label}
 
-### トレース一覧
+### 期間
+- {start_dt.strftime('%Y-%m-%d %H:%M')} - {end_dt.strftime('%Y-%m-%d %H:%M')} UTC
 
-| Trace ID | タイムスタンプ | ステータス | 実行時間 | ツール使用 |
-|----------|--------------|----------|---------|-----------|
 """
 
-        # 実際のトレースデータ取得を試行
         try:
-            # DataRobot Data Exploration API経由でトレース取得
-            import datarobot as dr
+            from datarobot.models.deployment import PredictionDataExport
 
-            params = {
-                "deploymentId": deployment_id,
-                "limit": limit,
-            }
-            if filter_status and filter_status != "all":
-                params["status"] = filter_status
-
-            response = dr.Client().get(  # type: ignore[attr-defined]
-                f"deployments/{deployment_id}/dataExploration/traces/",
-                params=params,
+            prediction_export = PredictionDataExport.create(
+                deployment_id=deployment_id,
+                start=start_dt,
+                end=end_dt,
             )
+            datasets = prediction_export.fetch_data()
 
-            if response.status_code == 200:
-                traces = response.json().get("data", [])
-                if traces:
-                    for trace in traces:
-                        trace_id = trace.get("traceId", "N/A")
-                        timestamp = trace.get("timestamp", "N/A")
-                        status = trace.get("status", "N/A")
-                        duration = trace.get("duration", "N/A")
-                        tools = trace.get("tools", "N/A")
-                        # Trace IDは先頭16文字+...で表示
-                        display_id = (
-                            f"{trace_id[:16]}..."
-                            if len(str(trace_id)) > 16
-                            else trace_id
-                        )
-                        trace_summary += (
-                            f"| {display_id} | {timestamp} "
-                            f"| {status} | {duration}ms | {tools} |\n"
-                        )
-                else:
-                    trace_summary += (
-                        "| - | - | - | - | データがありません |\n"
-                    )
+            if datasets:
+                df = datasets[0].get_as_dataframe()
+                total_rows = len(df)
+                display_df = df.head(limit)
+
+                trace_summary += f"取得件数: {total_rows}件（表示: {len(display_df)}件）\n\n"
+
+                # カラム情報を表示
+                columns = list(df.columns)
+                trace_summary += f"### データカラム\n`{', '.join(columns[:20])}`"
+                if len(columns) > 20:
+                    trace_summary += f" ...他{len(columns) - 20}列"
+                trace_summary += "\n\n"
+
+                # データを表形式で表示（主要カラムを選択）
+                display_cols = []
+                for col_candidate in [
+                    "association_id",
+                    "ASSOCIATION_ID",
+                    "timestamp",
+                    "TIMESTAMP",
+                    "prediction",
+                    "predicted_value",
+                    "class_label",
+                    "response_time",
+                ]:
+                    if col_candidate in columns:
+                        display_cols.append(col_candidate)
+
+                if not display_cols:
+                    display_cols = columns[:5]
+
+                trace_summary += "### データ一覧\n\n"
+                trace_summary += "| " + " | ".join(display_cols) + " |\n"
+                trace_summary += "|" + "|".join(["---"] * len(display_cols)) + "|\n"
+
+                for _, row in display_df.iterrows():
+                    vals = []
+                    for col in display_cols:
+                        val = str(row.get(col, "N/A"))
+                        if len(val) > 40:
+                            val = val[:37] + "..."
+                        vals.append(val)
+                    trace_summary += "| " + " | ".join(vals) + " |\n"
             else:
+                trace_summary += "予測データが見つかりませんでした。\n"
                 trace_summary += (
-                    f"| - | - | - | - | API応答: {response.status_code} |\n"
+                    "\n**注意**: 予測データを取得するには、"
+                    "デプロイメントで予測データの保存が有効になっている必要があります。"
                 )
-        except Exception as api_err:
-            trace_summary += (
-                f"| - | - | - | - | データ取得エラー: {str(api_err)[:50]} |\n"
-            )
 
-        trace_summary += """
-**注意**: 詳細なトレース情報を確認するには、`search_trace_by_id` ツールを使用してください。"""
+        except ImportError:
+            trace_summary += (
+                "PredictionDataExport が利用できません。\n"
+                "datarobot パッケージのバージョンを確認してください。"
+            )
+        except Exception as api_err:
+            error_msg = str(api_err)
+            if "prediction data storage" in error_msg.lower() or "not enabled" in error_msg.lower():
+                trace_summary += (
+                    "予測データの保存が有効になっていません。\n\n"
+                    "**対処方法**: DataRobot UIでデプロイメント設定 → "
+                    "「予測データの保存」を有効にしてください。"
+                )
+            else:
+                trace_summary += f"予測データの取得に失敗しました: {error_msg}\n"
 
         return trace_summary
 
     except Exception as e:
-        return f"トレース取得中にエラーが発生しました: {str(e)}"
+        return f"予測データ取得中にエラーが発生しました: {str(e)}"
 
 
 @dr_mcp_tool(tags={"monitoring", "trace", "detail"})
 async def search_trace_by_id(
     deployment_id: str,
-    trace_id: str,
+    association_id: str,
 ) -> str:
     """
-    特定のTrace IDの詳細情報を取得
+    特定のアソシエーションIDの予測データ詳細を取得
 
     Args:
         deployment_id: デプロイメントID
-        trace_id: トレースID（例: "e8aee2e2ee9bc3f655105bd96769b7ff"）
+        association_id: アソシエーションID（予測リクエストの識別子）
 
     Returns:
-        トレース詳細（マークダウン形式）
-        - Span情報（親子関係、実行順序）
-        - 各SpanのInput/Output
-        - エラー情報（存在する場合）
-        - パフォーマンスメトリクス
+        予測データ詳細（マークダウン形式）
+        - 予測入力データ
+        - 予測結果
+        - メトリクス情報
     """
     try:
         deployment = Deployment.get(deployment_id=deployment_id)
 
-        trace_detail = f"""## トレース詳細
+        detail = f"""## 予測データ詳細
 
-**Trace ID**: `{trace_id}`
-**Deployment**: {deployment.label}
+**アソシエーションID**: `{association_id}`
+**デプロイメント**: {deployment.label}
+
 """
 
-        # OpenTelemetry APIを使用してトレース詳細を取得
         try:
-            import datarobot as dr
+            from datarobot.models.deployment import PredictionDataExport
 
-            response = dr.Client().get(  # type: ignore[attr-defined]
-                f"deployments/{deployment_id}/dataExploration/traces/{trace_id}/",
+            # 直近7日間のデータからアソシエーションIDで検索
+            end_dt = datetime.now(timezone.utc)
+            start_dt = end_dt - timedelta(days=7)
+
+            prediction_export = PredictionDataExport.create(
+                deployment_id=deployment_id,
+                start=start_dt,
+                end=end_dt,
             )
+            datasets = prediction_export.fetch_data()
 
-            if response.status_code == 200:
-                trace_data = response.json()
+            if datasets:
+                df = datasets[0].get_as_dataframe()
 
-                spans = trace_data.get("spans", [])
-                if spans:
-                    trace_detail += "\n### Span階層構造\n\n```\n"
-                    for span in spans:
-                        name = span.get("name", "unknown")
-                        duration = span.get("duration", "N/A")
-                        depth = span.get("depth", 0)
-                        indent = "  " * depth
-                        prefix = "├─ " if depth > 0 else ""
-                        trace_detail += (
-                            f"{indent}{prefix}{name} [{duration}ms]\n"
-                        )
-                    trace_detail += "```\n"
+                # アソシエーションIDカラムを検索
+                assoc_col = None
+                for col_candidate in ["association_id", "ASSOCIATION_ID", "associationId"]:
+                    if col_candidate in df.columns:
+                        assoc_col = col_candidate
+                        break
 
-                    trace_detail += "\n### 詳細メトリクス\n\n"
-                    trace_detail += (
-                        "| Span | 実行時間 | ステータス |\n"
-                        "|------|---------|----------|\n"
-                    )
-                    for span in spans:
-                        name = span.get("name", "unknown")
-                        duration = span.get("duration", "N/A")
-                        status = span.get("status", "N/A")
-                        trace_detail += (
-                            f"| {name} | {duration}ms | {status} |\n"
-                        )
+                matched = None
+                if assoc_col:
+                    matched = df[df[assoc_col].astype(str) == str(association_id)]
 
-                    # エラー情報
-                    error_spans = [s for s in spans if s.get("status") == "error"]
-                    if error_spans:
-                        trace_detail += "\n### エラー情報\n\n"
-                        for err_span in error_spans:
-                            trace_detail += (
-                                f"- **{err_span.get('name')}**: "
-                                f"{err_span.get('error_message', 'エラー詳細なし')}\n"
-                            )
+                if matched is not None and len(matched) > 0:
+                    row = matched.iloc[0]
+                    detail += "### 予測データ\n\n"
+                    for col in df.columns:
+                        val = str(row[col])
+                        if len(val) > 200:
+                            val = val[:197] + "..."
+                        detail += f"- **{col}**: {val}\n"
                 else:
-                    trace_detail += (
-                        "\nSpan情報が見つかりませんでした。\n"
+                    detail += (
+                        f"アソシエーションID `{association_id}` に一致する"
+                        "データが見つかりませんでした。\n\n"
+                        "**ヒント**: \n"
+                        "- IDが正しいか確認してください\n"
+                        "- `get_recent_traces` で最近のデータを確認してください\n"
+                        "- 7日以上前のデータは検索できません\n"
                     )
             else:
-                trace_detail += (
-                    f"\nトレースデータの取得に失敗しました "
-                    f"(ステータス: {response.status_code})\n"
-                )
-        except Exception as api_err:
-            trace_detail += (
-                f"\nトレース詳細APIの呼び出しに失敗しました: {str(api_err)}\n"
-                "\nDataRobot UIのトレース詳細画面で確認してください。"
-            )
+                detail += "予測データが見つかりませんでした。\n"
 
-        return trace_detail
+        except ImportError:
+            detail += (
+                "PredictionDataExport が利用できません。\n"
+                "datarobot パッケージのバージョンを確認してください。"
+            )
+        except Exception as api_err:
+            detail += f"予測データの取得に失敗しました: {str(api_err)}\n"
+
+        return detail
 
     except Exception as e:
-        return f"トレース詳細取得中にエラーが発生しました: {str(e)}"
+        return f"予測データ詳細取得中にエラーが発生しました: {str(e)}"
 
 
 @dr_mcp_tool(tags={"monitoring", "error", "analysis"})
@@ -490,20 +555,21 @@ async def analyze_errors(
         start_time = end_time - timedelta(hours=time_range_hours)
 
         service_stats = deployment.get_service_stats(start=start_time, end=end_time)
+        m = service_stats.metrics
 
-        total_requests = service_stats.metrics.get("totalRequests", 0)
-        total_errors = service_stats.metrics.get("totalErrors", 0)
-        error_rate = (total_errors / total_requests * 100) if total_requests > 0 else 0
+        total_requests = m.get("totalRequests") or 0
+        server_error_rate = m.get("serverErrorRate") or 0
+        user_error_rate = m.get("userErrorRate") or 0
+        total_error_rate = server_error_rate + user_error_rate
+        error_rate_pct = total_error_rate * 100
 
-        data_errors = service_stats.metrics.get("dataErrors", 0)
-        system_errors = service_stats.metrics.get("systemErrors", 0)
-
-        data_error_pct = (
-            (data_errors / total_errors * 100) if total_errors > 0 else 0
+        server_errors = (
+            int(total_requests * server_error_rate) if total_requests > 0 else 0
         )
-        system_error_pct = (
-            (system_errors / total_errors * 100) if total_errors > 0 else 0
+        user_errors = (
+            int(total_requests * user_error_rate) if total_requests > 0 else 0
         )
+        total_errors = server_errors + user_errors
 
         error_report = f"""## エラー分析: {deployment.label}
 
@@ -513,23 +579,23 @@ async def analyze_errors(
 
 ### サマリー
 - **総リクエスト数**: {total_requests:,}
-- **総エラー数**: {total_errors:,}
-- **エラー率**: {error_rate:.2f}%
+- **推定エラー数**: {total_errors:,}
+- **エラー率**: {error_rate_pct:.2f}%
 
 ### エラー内訳
-- **データエラー**: {data_errors} ({data_error_pct:.1f}%)
-- **システムエラー**: {system_errors} ({system_error_pct:.1f}%)
+- **サーバーエラー率**: {server_error_rate * 100:.2f}% (推定 {server_errors} 件)
+- **ユーザーエラー率**: {user_error_rate * 100:.2f}% (推定 {user_errors} 件)
 
 ### 推奨アクション
 """
 
-        if error_rate > 10:
+        if error_rate_pct > 10:
             error_report += (
                 "**高エラー率検出** - 緊急対応が必要です\n"
                 "- システムログを確認してください\n"
                 "- 最近のデプロイメント変更を確認してください\n"
             )
-        elif error_rate > 5:
+        elif error_rate_pct > 5:
             error_report += (
                 "**中程度のエラー率** - 監視を強化してください\n"
                 "- エラーパターンを詳細分析してください\n"
@@ -576,9 +642,28 @@ async def get_performance_metrics(
         start_time = end_time - timedelta(hours=time_range_hours)
 
         service_stats = deployment.get_service_stats(start=start_time, end=end_time)
+        m = service_stats.metrics
 
-        total_requests = service_stats.metrics.get("totalRequests", 0)
-        avg_latency = service_stats.metrics.get("avgResponseTime", 0)
+        total_requests = m.get("totalRequests") or 0
+        total_predictions = m.get("totalPredictions") or 0
+        execution_time = m.get("executionTime")
+        response_time = m.get("responseTime")
+        slow_requests = m.get("slowRequests")
+        median_load = m.get("medianLoad")
+        peak_load = m.get("peakLoad")
+        cache_hit_ratio = m.get("cacheHitRatio")
+
+        def fmt_ms(val: object) -> str:
+            if val is None:
+                return "N/A"
+            return f"{val:,.1f}ms" if isinstance(val, (int, float)) else str(val)
+
+        def fmt_load(val: object) -> str:
+            if val is None:
+                return "N/A"
+            return (
+                f"{val:.1f} req/min" if isinstance(val, (int, float)) else str(val)
+            )
 
         metrics_report = f"""## パフォーマンスメトリクス: {deployment.label}
 
@@ -586,26 +671,28 @@ async def get_performance_metrics(
 - **過去 {time_range_hours} 時間**
 
 ### レイテンシ統計
-- **平均**: {service_stats.metrics.get('avgResponseTime', 'N/A')}ms
-- **中央値 (P50)**: {service_stats.metrics.get('p50ResponseTime', 'N/A')}ms
-- **P95**: {service_stats.metrics.get('p95ResponseTime', 'N/A')}ms
-- **P99**: {service_stats.metrics.get('p99ResponseTime', 'N/A')}ms
-- **最大**: {service_stats.metrics.get('maxResponseTime', 'N/A')}ms
+- **実行時間**: {fmt_ms(execution_time)}
+- **レスポンス時間**: {fmt_ms(response_time)}
+- **低速リクエスト数**: {slow_requests if slow_requests is not None else 'N/A'}
 
 ### スループット
 - **総リクエスト数**: {total_requests:,}
+- **総予測数**: {total_predictions:,}
 - **平均リクエスト/時**: {total_requests / time_range_hours:.1f}
+- **中央値負荷**: {fmt_load(median_load)}
+- **ピーク負荷**: {fmt_load(peak_load)}
+- **キャッシュヒット率**: {f"{cache_hit_ratio * 100:.1f}%" if cache_hit_ratio is not None else "N/A"}
 
 ### 推奨事項
 """
 
-        if isinstance(avg_latency, (int, float)) and avg_latency > 10000:
+        if isinstance(response_time, (int, float)) and response_time > 10000:
             metrics_report += (
                 "**高レイテンシ検出** - 最適化が必要です\n"
                 "- LLMモデルの変更を検討してください\n"
                 "- ツール呼び出しの並列化を検討してください\n"
             )
-        elif isinstance(avg_latency, (int, float)) and avg_latency > 5000:
+        elif isinstance(response_time, (int, float)) and response_time > 5000:
             metrics_report += "**レイテンシがやや高い** - 監視を継続してください\n"
         else:
             metrics_report += "**良好なパフォーマンス**\n"
@@ -639,15 +726,19 @@ async def diagnose_deployment_issues(
         end_time = datetime.now(timezone.utc)
         start_time = end_time - timedelta(hours=24)
         service_stats = deployment.get_service_stats(start=start_time, end=end_time)
+        m = service_stats.metrics
 
         issues = []
         health_score = 100
 
         # 1. エラー率チェック
-        total_requests = service_stats.metrics.get("totalRequests", 0)
-        total_errors = service_stats.metrics.get("totalErrors", 0)
-        error_rate = (
-            (total_errors / total_requests * 100) if total_requests > 0 else 0
+        total_requests = m.get("totalRequests") or 0
+        server_error_rate = m.get("serverErrorRate") or 0
+        user_error_rate = m.get("userErrorRate") or 0
+        total_error_rate = server_error_rate + user_error_rate
+        error_rate = total_error_rate * 100
+        total_errors = (
+            int(total_requests * total_error_rate) if total_requests > 0 else 0
         )
 
         if error_rate > 10:
@@ -672,7 +763,7 @@ async def diagnose_deployment_issues(
             health_score -= 15
 
         # 2. レイテンシチェック
-        avg_latency = service_stats.metrics.get("avgResponseTime", 0)
+        avg_latency = m.get("responseTime") or 0
         if isinstance(avg_latency, (int, float)):
             if avg_latency > 10000:
                 issues.append(
@@ -778,3 +869,116 @@ async def diagnose_deployment_issues(
 
     except Exception as e:
         return f"デプロイメント診断中にエラーが発生しました: {str(e)}"
+
+
+@dr_mcp_tool(tags={"monitoring", "metrics", "custom", "llm"})
+async def get_custom_metrics(
+    deployment_id: str,
+    time_range_hours: int = 24,
+) -> str:
+    """
+    デプロイメントのカスタムメトリクス（LLMコスト、トークン使用量等）を取得
+
+    Args:
+        deployment_id: デプロイメントID
+        time_range_hours: 取得対象の時間範囲（時間単位、デフォルト: 24）
+
+    Returns:
+        カスタムメトリクス一覧（マークダウン形式）
+        - メトリクス名、値、タイムスタンプ
+        - LLMトークン使用量、コスト情報（設定されている場合）
+    """
+    try:
+        deployment = Deployment.get(deployment_id=deployment_id)
+
+        report = f"""## カスタムメトリクス: {deployment.label}
+
+### 期間: 過去 {time_range_hours} 時間
+
+"""
+
+        try:
+            import datarobot as dr
+
+            # カスタムメトリクス一覧を取得
+            response = dr.Client().get(  # type: ignore[attr-defined]
+                f"deployments/{deployment_id}/customMetrics/",
+            )
+
+            if response.status_code == 200:
+                metrics_data = response.json().get("data", [])
+
+                if not metrics_data:
+                    report += (
+                        "カスタムメトリクスが設定されていません。\n\n"
+                        "**ヒント**: DataRobot UIでカスタムメトリクスを追加すると、"
+                        "LLMコスト、トークン使用量等を監視できます。"
+                    )
+                    return report
+
+                report += f"登録済みメトリクス数: {len(metrics_data)}\n\n"
+
+                # 各メトリクスの値を取得
+                end_dt = datetime.now(timezone.utc)
+                start_dt = end_dt - timedelta(hours=time_range_hours)
+
+                report += (
+                    "| メトリクス名 | タイプ | 最新値 | 説明 |\n"
+                    "|-------------|-------|-------|------|\n"
+                )
+
+                for metric in metrics_data:
+                    metric_id = metric.get("id", "")
+                    metric_name = metric.get("name", "N/A")
+                    metric_type = metric.get("type", "N/A")
+                    description = metric.get("description", "")
+                    if len(description) > 50:
+                        description = description[:47] + "..."
+
+                    # メトリクス値を取得
+                    latest_value = "N/A"
+                    try:
+                        val_response = dr.Client().get(  # type: ignore[attr-defined]
+                            f"deployments/{deployment_id}/customMetrics/{metric_id}/values/",
+                            params={
+                                "start": start_dt.isoformat(),
+                                "end": end_dt.isoformat(),
+                            },
+                        )
+                        if val_response.status_code == 200:
+                            val_data = val_response.json()
+                            buckets = val_data.get("buckets", [])
+                            if buckets:
+                                # 最新バケットの値を取得
+                                last_bucket = buckets[-1]
+                                val = last_bucket.get("value")
+                                if val is not None:
+                                    if isinstance(val, float):
+                                        latest_value = f"{val:.4f}"
+                                    else:
+                                        latest_value = str(val)
+                    except Exception:
+                        pass
+
+                    report += (
+                        f"| {metric_name} | {metric_type} "
+                        f"| {latest_value} | {description} |\n"
+                    )
+
+                report += (
+                    "\n**注意**: カスタムメトリクスの詳細な時系列データは "
+                    "DataRobot UIのカスタムメトリクスタブで確認できます。"
+                )
+            else:
+                report += (
+                    f"カスタムメトリクスの取得に失敗しました "
+                    f"(ステータス: {response.status_code})\n"
+                )
+
+        except Exception as api_err:
+            report += f"カスタムメトリクスAPIの呼び出しに失敗しました: {str(api_err)}\n"
+
+        return report
+
+    except Exception as e:
+        return f"カスタムメトリクス取得中にエラーが発生しました: {str(e)}"

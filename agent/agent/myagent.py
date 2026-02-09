@@ -40,16 +40,19 @@ AIエージェントのデプロイメントを監視し、トレース分析、
 - **get_deployment_overview**: デプロイメントの概要情報（ID、ステータス、環境）
 
 ### サービスヘルス
-- **get_service_health**: リクエスト数、エラー率、レスポンス時間
+- **get_service_health**: リクエスト数、エラー率（サーバー/ユーザー）、実行時間、レスポンス時間、負荷
 - **analyze_errors**: エラーパターン分析、頻出エラー特定
 - **diagnose_deployment_issues**: デプロイメントの問題を自動診断
 
-### トレース分析
-- **get_recent_traces**: 最近のトレース一覧（時系列）
-- **search_trace_by_id**: 特定トレースの詳細（Span階層、Input/Output）
+### 予測データ・トレース
+- **get_recent_traces**: 最近の予測データ一覧（PredictionDataExport経由）
+- **search_trace_by_id**: 特定のアソシエーションIDの予測データ詳細
 
 ### パフォーマンス
-- **get_performance_metrics**: レイテンシ、スループット、コスト分析
+- **get_performance_metrics**: 実行時間、レスポンス時間、スループット、負荷分析
+
+### カスタムメトリクス
+- **get_custom_metrics**: LLMコスト、トークン使用量等のカスタムメトリクス
 
 ### ユーザー監視
 - **get_user_usage_stats**: ユーザー単位の利用統計
@@ -66,14 +69,16 @@ AIエージェントのデプロイメントを監視し、トレース分析、
 2. 「deploy-agentの状態を確認して」 → find_deployment_by_name → get_deployment_overview
 3. 「最近のエラーは？」 → analyze_errors
 4. 「パフォーマンスが悪化している」 → get_performance_metrics → get_service_health
-5. 「trace ID XXX の詳細」 → search_trace_by_id
-6. 「今日のトレース一覧」 → get_recent_traces
+5. 「予測データの詳細を見せて」 → search_trace_by_id（アソシエーションID指定）
+6. 「今日の予測データ一覧」 → get_recent_traces
 7. 「ヘルスチェック」 → get_service_health → analyze_errors
 8. 「ユーザーごとの利用状況」 → get_user_usage_stats
 9. 「全体の利用状況」 → get_all_users_summary
 10. 「このエラーの対処方法は？」 → suggest_error_resolution
 11. 「過去のエラー履歴」 → get_error_resolution_history
 12. 「問題がないか診断して」 → diagnose_deployment_issues
+13. 「LLMのコストは？」 → get_custom_metrics
+14. 「トークン使用量を確認」 → get_custom_metrics
 
 ### デプロイメントIDの扱い（重要）
 - **ユーザーがデプロイメント名（ラベル）で指定した場合**: 必ず `find_deployment_by_name` でIDに変換してから他のツールを実行する
@@ -110,9 +115,10 @@ AIエージェントのデプロイメントを監視し、トレース分析、
 1. get_deployment_overview - 基本状態確認
 2. get_service_health - 全体的なヘルスチェック
 3. analyze_errors - エラーパターン特定
-4. get_recent_traces - 最近の実行状況確認
-5. search_trace_by_id - 特定エラーの詳細調査
+4. get_recent_traces - 最近の予測データ確認
+5. search_trace_by_id - 特定予測データの詳細調査
 6. get_performance_metrics - パフォーマンスボトルネック特定
+7. get_custom_metrics - LLMコスト・カスタムメトリクス確認
 """
 
 
