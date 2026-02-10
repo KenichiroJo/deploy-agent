@@ -44,9 +44,9 @@ export interface ChatSidebarProps {
 }
 
 const sidebarQuickActions = [
-  { icon: Server, label: '\u30c7\u30d7\u30ed\u30a4\u30e1\u30f3\u30c8\u4e00\u89a7', prompt: '\u30c7\u30d7\u30ed\u30a4\u30e1\u30f3\u30c8\u4e00\u89a7\u3092\u898b\u305b\u3066' },
-  { icon: Activity, label: '\u30d8\u30eb\u30b9\u30c1\u30a7\u30c3\u30af', prompt: '\u5168\u30c7\u30d7\u30ed\u30a4\u30e1\u30f3\u30c8\u306e\u30d8\u30eb\u30b9\u30c1\u30a7\u30c3\u30af\u3092\u3057\u3066' },
-  { icon: AlertTriangle, label: '\u30a8\u30e9\u30fc\u5206\u6790', prompt: '\u6700\u8fd1\u306e\u30a8\u30e9\u30fc\u3092\u5206\u6790\u3057\u3066' },
+  { icon: Server, label: 'デプロイメント一覧', prompt: 'デプロイメント一覧を見せて' },
+  { icon: Activity, label: 'ヘルスチェック', prompt: '全デプロイメントのヘルスチェックをして' },
+  { icon: AlertTriangle, label: 'エラー分析', prompt: '最近のエラーを分析して' },
 ];
 
 export function ChatSidebar({
@@ -91,7 +91,7 @@ export function ChatSidebar({
         {/* Quick Actions */}
         <SidebarGroup>
           <SidebarGroupLabel className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
-            \u30af\u30a4\u30c3\u30af\u30a2\u30af\u30b7\u30e7\u30f3
+            {'クイックアクション'}
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -117,13 +117,13 @@ export function ChatSidebar({
         <SidebarGroup>
           <div className="flex items-center justify-between pr-1">
             <SidebarGroupLabel className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
-              \u4f1a\u8a71\u5c65\u6b74
+              {'会話履歴'}
             </SidebarGroupLabel>
             <button
               onClick={onChatCreate}
               disabled={isLoading}
               className="flex items-center justify-center w-5 h-5 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer"
-              title="\u65b0\u3057\u3044\u30c1\u30e3\u30c3\u30c8"
+              title="新しいチャット"
             >
               <Plus className="w-3.5 h-3.5" />
             </button>
@@ -166,7 +166,7 @@ export function ChatSidebar({
                               setOpen(true);
                             }}
                           >
-                            <span>\u524a\u9664</span>
+                            <span>{'削除'}</span>
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -184,7 +184,7 @@ export function ChatSidebar({
             <SidebarMenuButton disabled={isLoading} asChild onClick={goToSettings}>
               <div className="cursor-pointer">
                 <Settings className="w-3.5 h-3.5" />
-                <span className="text-xs">\u8a2d\u5b9a</span>
+                <span className="text-xs">{'設定'}</span>
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>

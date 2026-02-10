@@ -19,9 +19,11 @@ from typing import AsyncGenerator, final
 from uuid import UUID, uuid4
 
 from ag_ui.core import (
+    AssistantMessage,
     BaseEvent,
     BaseMessage,
     RunAgentInput,
+    UserMessage,
     RunErrorEvent,
     RunFinishedEvent,
     RunStartedEvent,
@@ -261,7 +263,8 @@ class AGUIAgentWithStorage(AGUIAgent):
         incoming_ids = {m.id for m in input.messages}
 
         # Build history messages from database records
-        history_messages: list[BaseMessage] = []
+        # RunAgentInput.messages requires role-specific types (UserMessage/AssistantMessage)
+        history_messages: list[UserMessage | AssistantMessage] = []
         for db_msg in all_db_messages:
             # Skip messages that are already in the incoming input
             if db_msg.agui_id and db_msg.agui_id in incoming_ids:
@@ -277,14 +280,23 @@ class AGUIAgentWithStorage(AGUIAgent):
             if not db_msg.content.strip():
                 continue
 
-            history_messages.append(
-                BaseMessage(
-                    id=db_msg.agui_id or str(db_msg.uuid),
-                    role=db_msg.role,
-                    content=db_msg.content,
-                    name=db_msg.name,
+            msg_id = db_msg.agui_id or str(db_msg.uuid)
+            if db_msg.role == Role.USER.value:
+                history_messages.append(
+                    UserMessage(
+                        id=msg_id,
+                        content=db_msg.content,
+                        name=db_msg.name or None,
+                    )
                 )
-            )
+            else:
+                history_messages.append(
+                    AssistantMessage(
+                        id=msg_id,
+                        content=db_msg.content,
+                        name=db_msg.name or None,
+                    )
+                )
 
         if not history_messages:
             # No useful history, return input as-is

@@ -5,10 +5,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { KeyboardEvent, useRef, useState } from 'react';
 
 const suggestions = [
-  '\u30c7\u30d7\u30ed\u30a4\u30e1\u30f3\u30c8\u4e00\u89a7',
-  '\u30d8\u30eb\u30b9\u30c1\u30a7\u30c3\u30af',
-  '\u30a8\u30e9\u30fc\u5206\u6790',
-  '\u30d1\u30d5\u30a9\u30fc\u30de\u30f3\u30b9\u78ba\u8a8d',
+  'デプロイメント一覧',
+  'ヘルスチェック',
+  'エラー分析',
+  'パフォーマンス確認',
 ];
 
 export interface ChatTextInputProps {
@@ -79,7 +79,7 @@ export function ChatTextInput({
           onCompositionStart={() => setIsComposing(true)}
           onCompositionEnd={() => setIsComposing(false)}
           onKeyDown={keyDownHandler}
-          placeholder="\u30c7\u30d7\u30ed\u30a4\u30e1\u30f3\u30c8\u306b\u3064\u3044\u3066\u8cea\u554f\u3059\u308b..."
+          placeholder="デプロイメントについて質問する..."
           className="pr-12 text-area"
         ></Textarea>
         {runningAgent ? (
@@ -91,7 +91,7 @@ export function ChatTextInput({
                 </Button>
               </span>
             </TooltipTrigger>
-            <TooltipContent>\u30a8\u30fc\u30b8\u30a7\u30f3\u30c8\u5b9f\u884c\u4e2d</TooltipContent>
+            <TooltipContent>{'エージェント実行中'}</TooltipContent>
           </Tooltip>
         ) : (
           <Button
