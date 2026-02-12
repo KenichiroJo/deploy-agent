@@ -29,7 +29,7 @@ async def list_deployments(
     Returns:
         デプロイメント一覧（マークダウン形式）
         - デプロイメントID、名前（ラベル）、ステータス
-        - 作成日時
+        - 作成日時、最終予測日時
     """
     try:
         deployments = Deployment.list()
@@ -52,18 +52,34 @@ async def list_deployments(
                 return f'"{search}" に一致するデプロイメントが見つかりませんでした。'
             return "アクセス可能なデプロイメントがありません。"
 
+        def _fmt_dt(dt_val: object) -> str:
+            """datetime値を表示用文字列にフォーマット"""
+            if dt_val is None:
+                return "N/A"
+            if isinstance(dt_val, datetime):
+                return dt_val.strftime("%Y-%m-%d %H:%M")
+            # 文字列の場合はISO形式をパース試行
+            try:
+                parsed = datetime.fromisoformat(str(dt_val).replace("Z", "+00:00"))
+                return parsed.strftime("%Y-%m-%d %H:%M")
+            except (ValueError, TypeError):
+                return str(dt_val)[:16]
+
         report = f"""## デプロイメント一覧
 
 取得件数: {len(deployments)}件{f' (検索: "{search}")' if search else ''}
 
-| # | デプロイメント名 | デプロイメントID | ステータス |
-|---|-----------------|----------------|----------|
+| # | デプロイメント名 | デプロイメントID | ステータス | 作成日 | 最終予測日時 |
+|---|-----------------|----------------|----------|-------|------------|
 """
 
         for i, d in enumerate(deployments, 1):
+            created = _fmt_dt(getattr(d, "created_at", None))
+            last_pred = _fmt_dt(getattr(d, "last_prediction_timestamp", None))
             report += (
                 f"| {i} | {d.label or 'N/A'} "
-                f"| `{d.id}` | {d.status or 'N/A'} |\n"
+                f"| `{d.id}` | {d.status or 'N/A'} "
+                f"| {created} | {last_pred} |\n"
             )
 
         report += (
