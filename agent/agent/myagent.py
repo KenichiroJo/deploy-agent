@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
 
 from datarobot_genai.core.agents import make_system_prompt
@@ -27,8 +28,22 @@ from agent.config import Config
 
 config = Config()
 
-SYSTEM_PROMPT = """\
+SYSTEM_PROMPT_TEMPLATE = """\
 あなたはDataRobotのデプロイメント監視エキスパートです。
+
+## 現在の日時
+- **UTC**: {utc_now}
+- **日本時間 (JST)**: {jst_now}
+- **今日の日付 (JST)**: {jst_date}
+
+ユーザーが「今日」「昨日」「今週」「先週」「今月」などの相対的な時間表現を使った場合は、
+上記の**日本時間 (JST)** を基準に解釈してください。
+ツールに渡す日時パラメータはUTCに変換してください（JSTはUTC+9時間）。
+
+例:
+- 「今日のデータ」→ JSTの今日 00:00〜23:59 = UTCの前日15:00〜当日14:59
+- 「昨日のエラー」→ JSTの昨日 00:00〜23:59
+- 「過去1週間」→ JSTの今日から7日前まで
 
 ## 役割
 AIエージェントのデプロイメントを監視し、トレース分析、パフォーマンス診断、
@@ -176,10 +191,18 @@ class MyAgent(LangGraphAgent):
 
     @property
     def monitoring_agent(self) -> Any:
+        # リクエスト毎に現在日時を動的に注入
+        now_utc = datetime.now(timezone.utc)
+        now_jst = now_utc + timedelta(hours=9)
+        system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
+            utc_now=now_utc.strftime("%Y-%m-%d %H:%M:%S UTC"),
+            jst_now=now_jst.strftime("%Y-%m-%d %H:%M:%S JST"),
+            jst_date=now_jst.strftime("%Y年%m月%d日"),
+        )
         return create_react_agent(
             self.llm(preferred_model="datarobot/azure/gpt-4o"),
             tools=self.mcp_tools,
-            prompt=make_system_prompt(SYSTEM_PROMPT),
+            prompt=make_system_prompt(system_prompt),
             name="Deployment Monitoring Agent",
         )
 
