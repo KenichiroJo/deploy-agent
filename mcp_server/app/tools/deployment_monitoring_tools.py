@@ -237,7 +237,7 @@ async def get_service_health(
         else:
             start_dt = end_dt - timedelta(hours=24)
 
-        service_stats = deployment.get_service_stats(start=start_dt, end=end_dt)
+        service_stats = deployment.get_service_stats(start_time=start_dt, end_time=end_dt)
         m = service_stats.metrics
 
         total_requests = m.get("totalRequests") or 0
@@ -554,7 +554,7 @@ async def analyze_errors(
         end_time = datetime.now(timezone.utc)
         start_time = end_time - timedelta(hours=time_range_hours)
 
-        service_stats = deployment.get_service_stats(start=start_time, end=end_time)
+        service_stats = deployment.get_service_stats(start_time=start_time, end_time=end_time)
         m = service_stats.metrics
 
         total_requests = m.get("totalRequests") or 0
@@ -641,7 +641,7 @@ async def get_performance_metrics(
         end_time = datetime.now(timezone.utc)
         start_time = end_time - timedelta(hours=time_range_hours)
 
-        service_stats = deployment.get_service_stats(start=start_time, end=end_time)
+        service_stats = deployment.get_service_stats(start_time=start_time, end_time=end_time)
         m = service_stats.metrics
 
         total_requests = m.get("totalRequests") or 0
@@ -725,7 +725,7 @@ async def diagnose_deployment_issues(
 
         end_time = datetime.now(timezone.utc)
         start_time = end_time - timedelta(hours=24)
-        service_stats = deployment.get_service_stats(start=start_time, end=end_time)
+        service_stats = deployment.get_service_stats(start_time=start_time, end_time=end_time)
         m = service_stats.metrics
 
         issues = []

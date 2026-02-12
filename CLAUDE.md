@@ -115,7 +115,7 @@ async def my_tool(deployment_id: str) -> str:
 deployment = Deployment.get(deployment_id=deployment_id)
 
 # サービス統計（正しいフィールド名）
-service_stats = deployment.get_service_stats(start=start_time, end=end_time)
+service_stats = deployment.get_service_stats(start_time=start_time, end_time=end_time)
 m = service_stats.metrics
 total_requests = m.get('totalRequests')       # 総リクエスト数
 total_predictions = m.get('totalPredictions') # 総予測数
