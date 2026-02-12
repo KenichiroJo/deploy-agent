@@ -31,9 +31,11 @@ export const ConfirmDialogModal = ({
     <Dialog defaultOpen={false} open={open} onOpenChange={handleXButton}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Remove chat?</DialogTitle>
+          <DialogTitle>{'チャットを削除しますか？'}</DialogTitle>
         </DialogHeader>
-        <DialogDescription>This action will remove {chatName} chat.</DialogDescription>
+        <DialogDescription>
+          {'「'}{chatName}{'」を削除します。この操作は取り消せません。'}
+        </DialogDescription>
         <DialogFooter>
           <Button
             variant="ghost"
@@ -42,15 +44,16 @@ export const ConfirmDialogModal = ({
               setOpen(false);
             }}
           >
-            Cancel
+            {'キャンセル'}
           </Button>
           <Button
+            variant="destructive"
             onClick={() => {
               onSuccess();
               setOpen(false);
             }}
           >
-            Remove
+            {'削除'}
           </Button>
         </DialogFooter>
       </DialogContent>

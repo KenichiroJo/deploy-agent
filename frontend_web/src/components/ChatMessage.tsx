@@ -56,7 +56,7 @@ class ChatMessageErrorBoundary extends Component<
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-sm font-medium text-destructive">Failed to render message</span>
+              <span className="text-sm font-medium text-destructive">{'メッセージの表示に失敗しました'}</span>
             </div>
             <CodeBlock code={JSON.stringify(this.props.message, null, 2)} />
             {this.state.error && (

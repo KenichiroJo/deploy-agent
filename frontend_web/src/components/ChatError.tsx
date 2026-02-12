@@ -14,7 +14,7 @@ export function ChatError({ error, createdAt }: ChatErrorEvent) {
         <div
           className={cn(
             'w-8 h-8 rounded-full flex items-center justify-center',
-            'bg-destructive/20 text-destructive-background'
+            'bg-destructive/20 text-destructive'
           )}
         >
           <AlertCircle className="w-4 h-4" />

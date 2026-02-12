@@ -148,7 +148,7 @@ export function ChatSidebar({
                     >
                       <div>
                         {getIcon(chat.id)}
-                        <span className="text-xs truncate">{chat.name || 'New Chat'}</span>
+                        <span className="text-xs truncate">{chat.name || '新しいチャット'}</span>
                       </div>
                     </SidebarMenuButton>
                     {chat.initialised && !chatToDelete && (
