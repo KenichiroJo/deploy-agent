@@ -9,6 +9,11 @@ from datarobot_genai.drmcp import dr_mcp_tool
 logger = logging.getLogger(__name__)
 
 
+def _truncate_to_hour(dt: datetime) -> datetime:
+    """DataRobot APIが要求する「時間のトップ」に切り捨て（分・秒を0に）"""
+    return dt.replace(minute=0, second=0, microsecond=0)
+
+
 @dr_mcp_tool(tags={"monitoring", "deployment", "list"})
 async def list_deployments(
     search: Optional[str] = None,
@@ -236,6 +241,10 @@ async def get_service_health(
             start_dt = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
         else:
             start_dt = end_dt - timedelta(hours=24)
+
+        # DataRobot APIは時間のトップ（XX:00:00）を要求する
+        start_dt = _truncate_to_hour(start_dt)
+        end_dt = _truncate_to_hour(end_dt)
 
         service_stats = deployment.get_service_stats(start_time=start_dt, end_time=end_dt)
         m = service_stats.metrics
@@ -551,8 +560,8 @@ async def analyze_errors(
     try:
         deployment = Deployment.get(deployment_id=deployment_id)
 
-        end_time = datetime.now(timezone.utc)
-        start_time = end_time - timedelta(hours=time_range_hours)
+        end_time = _truncate_to_hour(datetime.now(timezone.utc))
+        start_time = _truncate_to_hour(end_time - timedelta(hours=time_range_hours))
 
         service_stats = deployment.get_service_stats(start_time=start_time, end_time=end_time)
         m = service_stats.metrics
@@ -638,8 +647,8 @@ async def get_performance_metrics(
     try:
         deployment = Deployment.get(deployment_id=deployment_id)
 
-        end_time = datetime.now(timezone.utc)
-        start_time = end_time - timedelta(hours=time_range_hours)
+        end_time = _truncate_to_hour(datetime.now(timezone.utc))
+        start_time = _truncate_to_hour(end_time - timedelta(hours=time_range_hours))
 
         service_stats = deployment.get_service_stats(start_time=start_time, end_time=end_time)
         m = service_stats.metrics
@@ -723,8 +732,8 @@ async def diagnose_deployment_issues(
     try:
         deployment = Deployment.get(deployment_id=deployment_id)
 
-        end_time = datetime.now(timezone.utc)
-        start_time = end_time - timedelta(hours=24)
+        end_time = _truncate_to_hour(datetime.now(timezone.utc))
+        start_time = _truncate_to_hour(end_time - timedelta(hours=24))
         service_stats = deployment.get_service_stats(start_time=start_time, end_time=end_time)
         m = service_stats.metrics
 

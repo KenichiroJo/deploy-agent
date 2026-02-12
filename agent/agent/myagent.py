@@ -11,14 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any
+from typing import Any, Mapping
 
 from datarobot_genai.core.agents import make_system_prompt
 from datarobot_genai.langgraph.agent import LangGraphAgent
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_litellm.chat_models import ChatLiteLLM
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import create_react_agent
+from langgraph.types import Command
+from openai.types.chat import CompletionCreateParams
 
 from agent.config import Config
 
@@ -127,6 +130,33 @@ class MyAgent(LangGraphAgent):
     """DataRobotデプロイメント監視に特化したエージェント。
     トレース分析、パフォーマンス診断、エラー調査を自然言語で実行。
     """
+
+    def convert_input_message(
+        self, completion_create_params: CompletionCreateParams | Mapping[str, Any]
+    ) -> Command:
+        """全メッセージ履歴をLangGraphのMessagesStateに渡す。
+
+        親クラスのデフォルト実装は最後のユーザーメッセージのみ抽出するため、
+        会話履歴が失われる。このオーバーライドで全メッセージを保持する。
+        """
+        params = dict(completion_create_params)
+        raw_messages = params.get("messages", [])
+
+        messages = []
+        for msg in raw_messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            if role == "user":
+                messages.append(HumanMessage(content=content))
+            elif role == "assistant":
+                messages.append(AIMessage(content=content))
+            # system / tool メッセージはスキップ（LLM側でsystem promptは別途設定）
+
+        # メッセージが空の場合はフォールバック
+        if not messages:
+            return super().convert_input_message(completion_create_params)
+
+        return Command(update={"messages": messages})
 
     @property
     def prompt_template(self) -> ChatPromptTemplate:
