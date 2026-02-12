@@ -1,10 +1,11 @@
-import { memo, useMemo, Component, type ReactNode, type ErrorInfo } from 'react';
+import { memo, useMemo, useState, Component, type ReactNode, type ErrorInfo } from 'react';
 import {
   User,
   Bot,
   Cog,
   Hammer,
   Wrench,
+  ChevronDown,
   ChevronRight,
   CheckCircle2,
   Loader2,
@@ -115,6 +116,8 @@ export function ToolInvocationPart({ part }: { part: ToolInvocationUIPart }) {
   const { toolName } = toolInvocation;
   const ctx = useChatContext();
   const tool = ctx.getTool(toolName);
+  const [isExpanded, setIsExpanded] = useState(false);
+
   if (tool?.render) {
     return tool.render({ status: 'complete', args: toolInvocation.args });
   }
@@ -131,41 +134,54 @@ export function ToolInvocationPart({ part }: { part: ToolInvocationUIPart }) {
   const hasResult = !!toolInvocation.result;
 
   return (
-    <div className="my-2 rounded-lg border border-border bg-card/50 overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-muted/30 border-b border-border">
-        <Wrench className="w-4 h-4 text-muted-foreground" />
-        <span className="text-sm text-muted-foreground">ツール実行</span>
+    <div className="my-1.5 rounded-lg border border-border bg-card/50 overflow-hidden">
+      {/* Header - clickable to toggle */}
+      <button
+        type="button"
+        className="flex items-center gap-2 px-3 py-1.5 w-full bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        {isExpanded ? (
+          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+        ) : (
+          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+        )}
+        <Wrench className="w-3.5 h-3.5 text-muted-foreground" />
         <Badge variant="secondary" className="font-mono text-xs">
           {toolInvocation.toolName}
         </Badge>
         {hasResult ? (
-          <CheckCircle2 className="w-4 h-4 text-brand ml-auto" />
+          <CheckCircle2 className="w-3.5 h-3.5 text-brand ml-auto" />
         ) : (
-          <Loader2 className="w-4 h-4 text-brand/60 ml-auto animate-spin" />
+          <Loader2 className="w-3.5 h-3.5 text-brand/60 ml-auto animate-spin" />
         )}
-      </div>
+      </button>
 
-      {/* Arguments Section */}
-      {toolInvocation.args && (
-        <div className="border-b border-border last:border-b-0">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted/20">
-            <ChevronRight className="w-3 h-3" />
-            引数
-          </div>
-          <CodeBlock code={JSON.stringify(toolInvocation.args, null, '  ')} />
-        </div>
-      )}
+      {/* Collapsible content */}
+      {isExpanded && (
+        <>
+          {/* Arguments Section */}
+          {toolInvocation.args && (
+            <div className="border-t border-border">
+              <div className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-muted-foreground bg-muted/20">
+                <ChevronRight className="w-3 h-3" />
+                引数
+              </div>
+              <CodeBlock code={JSON.stringify(toolInvocation.args, null, '  ')} />
+            </div>
+          )}
 
-      {/* Result Section */}
-      {toolInvocation.result && (
-        <div>
-          <div className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted/20">
-            <ChevronRight className="w-3 h-3" />
-            結果
-          </div>
-          <CodeBlock code={toolInvocation.result} />
-        </div>
+          {/* Result Section */}
+          {toolInvocation.result && (
+            <div className="border-t border-border">
+              <div className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-muted-foreground bg-muted/20">
+                <ChevronRight className="w-3 h-3" />
+                結果
+              </div>
+              <CodeBlock code={toolInvocation.result} />
+            </div>
+          )}
+        </>
       )}
     </div>
   );

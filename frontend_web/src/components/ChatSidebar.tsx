@@ -39,6 +39,7 @@ export interface ChatSidebarProps {
   onChatCreate: () => any;
   onChatSelect: (threadId: string) => any;
   onChatDelete: (threadId: string, callbackFn: () => void) => any;
+  onQuickAction?: (prompt: string) => void;
   chats?: ChatListItem[];
   isLoadingDeleteChat: boolean;
 }
@@ -56,6 +57,7 @@ export function ChatSidebar({
   onChatSelect,
   onChatCreate,
   onChatDelete,
+  onQuickAction,
   isLoadingDeleteChat,
 }: ChatSidebarProps) {
   const navigate = useNavigate();
@@ -100,7 +102,13 @@ export function ChatSidebar({
                   <SidebarMenuButton
                     disabled={isLoading}
                     asChild
-                    onClick={onChatCreate}
+                    onClick={() => {
+                      if (onQuickAction) {
+                        onQuickAction(action.prompt);
+                      } else {
+                        onChatCreate();
+                      }
+                    }}
                   >
                     <div className="cursor-pointer">
                       <action.icon className="w-3.5 h-3.5 text-brand/70" />

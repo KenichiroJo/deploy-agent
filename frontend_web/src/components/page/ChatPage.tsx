@@ -1,4 +1,4 @@
-import { PropsWithChildren } from 'react';
+import { PropsWithChildren, useCallback, useEffect, useRef, useState } from 'react';
 import { v4 as uuid } from 'uuid';
 import z from 'zod/v4';
 import { Skeleton } from '@/components/ui/skeleton.tsx';
@@ -63,6 +63,17 @@ export function ChatPage({
     showStartChat: false,
   });
 
+  // Pending prompt for quick actions: create new chat → auto-send prompt on mount
+  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
+
+  const handleQuickAction = useCallback(
+    (prompt: string) => {
+      setPendingPrompt(prompt);
+      addChatHandler();
+    },
+    [addChatHandler],
+  );
+
   return (
     <div className="chat">
       <ChatSidebar
@@ -72,16 +83,21 @@ export function ChatPage({
         onChatCreate={addChatHandler}
         onChatSelect={setChatId}
         onChatDelete={deleteChatHandler}
+        onQuickAction={handleQuickAction}
         isLoadingDeleteChat={isLoadingDeleteChat}
       />
 
       <Loading isLoading={isLoadingChats}>
         {hasChat ? (
           <ChatProvider chatId={chatId} runInBackground={true} isNewChat={isNewChat}>
-            <ChatImplementation chatId={chatId} />
+            <ChatImplementation
+              chatId={chatId}
+              pendingPrompt={pendingPrompt}
+              onPendingPromptConsumed={() => setPendingPrompt(null)}
+            />
           </ChatProvider>
         ) : (
-          <StartNewChat createChat={addChatHandler} />
+          <StartNewChat createChat={addChatHandler} onQuickAction={handleQuickAction} />
         )}
       </Loading>
     </div>
@@ -102,7 +118,15 @@ function Loading({ isLoading, children }: { isLoading: boolean } & PropsWithChil
   return children;
 }
 
-export function ChatImplementation({ chatId }: { chatId: string }) {
+export function ChatImplementation({
+  chatId,
+  pendingPrompt,
+  onPendingPromptConsumed,
+}: {
+  chatId: string;
+  pendingPrompt?: string | null;
+  onPendingPromptConsumed?: () => void;
+}) {
   const {
     sendMessage,
     userInput,
@@ -113,6 +137,21 @@ export function ChatImplementation({ chatId }: { chatId: string }) {
     isLoadingHistory,
     isAgentRunning,
   } = useChatContext();
+
+  // Auto-send pending prompt from quick action
+  const pendingPromptSentRef = useRef(false);
+  useEffect(() => {
+    if (pendingPrompt && !pendingPromptSentRef.current && !isLoadingHistory) {
+      pendingPromptSentRef.current = true;
+      sendMessage(pendingPrompt);
+      onPendingPromptConsumed?.();
+    }
+  }, [pendingPrompt, isLoadingHistory, sendMessage, onPendingPromptConsumed]);
+
+  // Reset ref when chatId changes
+  useEffect(() => {
+    pendingPromptSentRef.current = false;
+  }, [chatId]);
 
   useAgUiTool({
     name: 'alert',
