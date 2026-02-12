@@ -12,6 +12,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { CodeBlock } from '@/components/ui/code-block';
 import { cn } from '@/lib/utils';
 import type { ContentPart, TextUIPart, ToolInvocationUIPart } from '@/types/message';
@@ -77,6 +78,55 @@ class ChatMessageErrorBoundary extends Component<
 
 const MarkdownRegExp = /^```markdown\s*|\s*```$/g;
 
+/* ── Custom Markdown Components ── */
+const markdownComponents = {
+  table: ({ children, ...props }: any) => (
+    <div className="md-table-wrap">
+      <table {...props}>{children}</table>
+    </div>
+  ),
+  thead: ({ children, ...props }: any) => (
+    <thead {...props}>{children}</thead>
+  ),
+  tbody: ({ children, ...props }: any) => (
+    <tbody {...props}>{children}</tbody>
+  ),
+  tr: ({ children, ...props }: any) => (
+    <tr {...props}>{children}</tr>
+  ),
+  th: ({ children, ...props }: any) => (
+    <th {...props}>{children}</th>
+  ),
+  td: ({ children, ...props }: any) => (
+    <td {...props}>{children}</td>
+  ),
+  h2: ({ children, ...props }: any) => (
+    <h2 {...props}>{children}</h2>
+  ),
+  h3: ({ children, ...props }: any) => (
+    <h3 {...props}>{children}</h3>
+  ),
+  ul: ({ children, ...props }: any) => (
+    <ul {...props}>{children}</ul>
+  ),
+  ol: ({ children, ...props }: any) => (
+    <ol {...props}>{children}</ol>
+  ),
+  li: ({ children, ...props }: any) => (
+    <li {...props}>{children}</li>
+  ),
+  strong: ({ children, ...props }: any) => (
+    <strong {...props}>{children}</strong>
+  ),
+  hr: (props: any) => <hr {...props} />,
+  code: ({ inline, children, ...props }: any) => {
+    if (inline) {
+      return <code className="md-inline-code" {...props}>{children}</code>;
+    }
+    return <code {...props}>{children}</code>;
+  },
+};
+
 export function UniversalContentPart({ part }: { part: ContentPart }) {
   if (part.type === 'text') {
     return <TextContentPart part={part} />;
@@ -92,11 +142,17 @@ const MarkdownBlock = memo(({ block, index }: { block: string; index: number }) 
     const inner = block.replace(MarkdownRegExp, '');
     return (
       <div key={index} className="markdown-block">
-        <ReactMarkdown>{inner}</ReactMarkdown>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+          {inner}
+        </ReactMarkdown>
       </div>
     );
   } else {
-    return <ReactMarkdown key={index}>{block}</ReactMarkdown>;
+    return (
+      <ReactMarkdown key={index} remarkPlugins={[remarkGfm]} components={markdownComponents}>
+        {block}
+      </ReactMarkdown>
+    );
   }
 });
 
@@ -134,54 +190,43 @@ export function ToolInvocationPart({ part }: { part: ToolInvocationUIPart }) {
   const hasResult = !!toolInvocation.result;
 
   return (
-    <div className="my-1.5 rounded-lg border border-border bg-card/50 overflow-hidden">
-      {/* Header - clickable to toggle */}
+    <div className="tool-invocation">
+      {/* Header */}
       <button
         type="button"
-        className="flex items-center gap-2 px-3 py-1.5 w-full bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer"
+        className="tool-invocation-header"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         {isExpanded ? (
-          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+          <ChevronDown className="w-3 h-3 text-muted-foreground" />
         ) : (
-          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+          <ChevronRight className="w-3 h-3 text-muted-foreground" />
         )}
-        <Wrench className="w-3.5 h-3.5 text-muted-foreground" />
-        <Badge variant="secondary" className="font-mono text-xs">
-          {toolInvocation.toolName}
-        </Badge>
+        <Wrench className="w-3 h-3 text-brand/60" />
+        <span className="tool-invocation-name">{toolInvocation.toolName}</span>
         {hasResult ? (
-          <CheckCircle2 className="w-3.5 h-3.5 text-brand ml-auto" />
+          <CheckCircle2 className="w-3 h-3 text-brand ml-auto" />
         ) : (
-          <Loader2 className="w-3.5 h-3.5 text-brand/60 ml-auto animate-spin" />
+          <Loader2 className="w-3 h-3 text-brand/60 ml-auto animate-spin" />
         )}
       </button>
 
       {/* Collapsible content */}
       {isExpanded && (
-        <>
-          {/* Arguments Section */}
+        <div className="tool-invocation-body">
           {toolInvocation.args && (
-            <div className="border-t border-border">
-              <div className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-muted-foreground bg-muted/20">
-                <ChevronRight className="w-3 h-3" />
-                引数
-              </div>
+            <div className="tool-invocation-section">
+              <div className="tool-invocation-section-label">引数</div>
               <CodeBlock code={JSON.stringify(toolInvocation.args, null, '  ')} />
             </div>
           )}
-
-          {/* Result Section */}
           {toolInvocation.result && (
-            <div className="border-t border-border">
-              <div className="flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-muted-foreground bg-muted/20">
-                <ChevronRight className="w-3 h-3" />
-                結果
-              </div>
+            <div className="tool-invocation-section">
+              <div className="tool-invocation-section-label">結果</div>
               <CodeBlock code={toolInvocation.result} />
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );
@@ -209,33 +254,31 @@ function ChatMessageContent({
 
   return (
     <div
-      className={cn('flex gap-3 p-4 rounded-lg', role === 'user' ? 'bg-muted/50' : 'bg-card')}
+      className={cn('chat-msg', role === 'user' ? 'chat-msg-user' : 'chat-msg-assistant')}
       data-message-id={id}
       data-thread-id={threadId}
       data-resource-id={resourceId}
       data-testid={`${type}-${role}-message-${id}`}
     >
-      <div className="flex-shrink-0">
+      <div className="chat-msg-avatar-wrap">
         <div
           className={cn(
-            'w-8 h-8 rounded-full flex items-center justify-center',
+            'chat-msg-avatar',
             role === 'user'
-              ? 'bg-primary text-primary-foreground'
+              ? 'chat-msg-avatar-user'
               : role === 'assistant'
-                ? 'bg-brand/15 text-brand'
-                : 'bg-accent text-accent-foreground'
+                ? 'chat-msg-avatar-assistant'
+                : 'chat-msg-avatar-system'
           )}
         >
-          <Icon className="w-4 h-4" />
+          <Icon className="w-3.5 h-3.5" />
         </div>
       </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-sm font-medium">
-            {role === 'assistant' ? 'エージェント' : role === 'user' ? 'あなた' : role}
-          </span>
-        </div>
-        <div className="text-sm whitespace-pre-wrap break-words content">
+      <div className="chat-msg-body">
+        <span className="chat-msg-role">
+          {role === 'assistant' ? 'エージェント' : role === 'user' ? 'あなた' : role}
+        </span>
+        <div className="content">
           {content.parts.map((part, i) => (
             <UniversalContentPart key={i} part={part} />
           ))}
