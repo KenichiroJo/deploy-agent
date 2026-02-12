@@ -14,6 +14,20 @@ def _truncate_to_hour(dt: datetime) -> datetime:
     return dt.replace(minute=0, second=0, microsecond=0)
 
 
+def _fmt_dt(dt_val: object) -> str:
+    """datetime値またはISO文字列を表示用文字列にフォーマット"""
+    if dt_val is None:
+        return "N/A"
+    if isinstance(dt_val, datetime):
+        return dt_val.strftime("%Y-%m-%d %H:%M")
+    # 文字列の場合はISO形式をパース試行
+    try:
+        parsed = datetime.fromisoformat(str(dt_val).replace("Z", "+00:00"))
+        return parsed.strftime("%Y-%m-%d %H:%M")
+    except (ValueError, TypeError):
+        return str(dt_val)[:16]
+
+
 @dr_mcp_tool(tags={"monitoring", "deployment", "list"})
 async def list_deployments(
     search: Optional[str] = None,
@@ -32,53 +46,51 @@ async def list_deployments(
         - 作成日時、最終予測日時
     """
     try:
-        deployments = Deployment.list()
+        import datarobot as dr
+
+        # REST APIを直接呼んで createdAt, predictionUsage を含む完全なデータを取得
+        client = dr.Client()  # type: ignore[attr-defined]
+        response = client.get("deployments/", params={"limit": limit})
+
+        if response.status_code != 200:
+            # フォールバック: SDK経由
+            return await _list_deployments_fallback(search, limit)
+
+        data = response.json().get("data", [])
 
         # 検索キーワードでフィルタ
         if search:
             search_lower = search.lower()
-            deployments = [
-                d
-                for d in deployments
-                if search_lower in (d.label or "").lower()
-                or search_lower in (d.description or "").lower()
+            data = [
+                d for d in data
+                if search_lower in (d.get("label") or "").lower()
+                or search_lower in (d.get("description") or "").lower()
             ]
 
-        # 件数制限
-        deployments = deployments[:limit]
-
-        if not deployments:
+        if not data:
             if search:
                 return f'"{search}" に一致するデプロイメントが見つかりませんでした。'
             return "アクセス可能なデプロイメントがありません。"
 
-        def _fmt_dt(dt_val: object) -> str:
-            """datetime値を表示用文字列にフォーマット"""
-            if dt_val is None:
-                return "N/A"
-            if isinstance(dt_val, datetime):
-                return dt_val.strftime("%Y-%m-%d %H:%M")
-            # 文字列の場合はISO形式をパース試行
-            try:
-                parsed = datetime.fromisoformat(str(dt_val).replace("Z", "+00:00"))
-                return parsed.strftime("%Y-%m-%d %H:%M")
-            except (ValueError, TypeError):
-                return str(dt_val)[:16]
-
         report = f"""## デプロイメント一覧
 
-取得件数: {len(deployments)}件{f' (検索: "{search}")' if search else ''}
+取得件数: {len(data)}件{f' (検索: "{search}")' if search else ''}
 
 | # | デプロイメント名 | デプロイメントID | ステータス | 作成日 | 最終予測日時 |
 |---|-----------------|----------------|----------|-------|------------|
 """
 
-        for i, d in enumerate(deployments, 1):
-            created = _fmt_dt(getattr(d, "created_at", None))
-            last_pred = _fmt_dt(getattr(d, "last_prediction_timestamp", None))
+        for i, d in enumerate(data, 1):
+            label = d.get("label") or "N/A"
+            dep_id = d.get("id") or "N/A"
+            status = d.get("status") or "N/A"
+            created = _fmt_dt(d.get("createdAt"))
+            # predictionUsage.lastPredictionTimestamp から最終予測日時を取得
+            pred_usage = d.get("predictionUsage") or {}
+            last_pred = _fmt_dt(pred_usage.get("lastPredictionTimestamp"))
             report += (
-                f"| {i} | {d.label or 'N/A'} "
-                f"| `{d.id}` | {d.status or 'N/A'} "
+                f"| {i} | {label} "
+                f"| `{dep_id}` | {status} "
                 f"| {created} | {last_pred} |\n"
             )
 
@@ -92,6 +104,51 @@ async def list_deployments(
 
     except Exception as e:
         return f"デプロイメント一覧の取得中にエラーが発生しました: {str(e)}"
+
+
+async def _list_deployments_fallback(
+    search: Optional[str] = None,
+    limit: int = 20,
+) -> str:
+    """SDK経由のフォールバック（REST APIが使えない場合）"""
+    deployments = Deployment.list()
+
+    if search:
+        search_lower = search.lower()
+        deployments = [
+            d for d in deployments
+            if search_lower in (d.label or "").lower()
+            or search_lower in (d.description or "").lower()
+        ]
+
+    deployments = deployments[:limit]
+
+    if not deployments:
+        if search:
+            return f'"{search}" に一致するデプロイメントが見つかりませんでした。'
+        return "アクセス可能なデプロイメントがありません。"
+
+    report = f"""## デプロイメント一覧
+
+取得件数: {len(deployments)}件{f' (検索: "{search}")' if search else ''}
+
+| # | デプロイメント名 | デプロイメントID | ステータス |
+|---|-----------------|----------------|----------|
+"""
+
+    for i, d in enumerate(deployments, 1):
+        report += (
+            f"| {i} | {d.label or 'N/A'} "
+            f"| `{d.id}` | {d.status or 'N/A'} |\n"
+        )
+
+    report += (
+        "\n**ヒント**: デプロイメントIDを使って "
+        "`get_deployment_overview` や `diagnose_deployment_issues` "
+        "で詳細を確認できます。"
+    )
+
+    return report
 
 
 @dr_mcp_tool(tags={"monitoring", "deployment", "search"})
