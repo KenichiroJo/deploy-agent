@@ -50,7 +50,10 @@ async def list_deployments(
 
         # REST APIを直接呼んで createdAt, predictionUsage を含む完全なデータを取得
         client = dr.Client()  # type: ignore[attr-defined]
-        response = client.get("deployments/", params={"limit": limit})
+        response = client.get(
+            "deployments/",
+            params={"limit": limit, "orderBy": "-lastPredictionTimestamp"},
+        )
 
         if response.status_code != 200:
             # フォールバック: SDK経由
